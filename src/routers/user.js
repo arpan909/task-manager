@@ -1,42 +1,73 @@
 const express=require('express');
+const auth = require('../middleware/auth');
 const User=require('../model/User');
 const router=express.Router();
 
 
 
 //All Users Route
-router.get('/users',async (req,res)=>{
+router.get('/users/me',auth,async (req,res)=>{
 
-    try{
-    const users=await User.find({});
-    res.send(users);
-    }
-    catch(e){
-        res.status(500).send(e);
-    }
-
-    // User.find({})
+    res.send(req.user);
+    // User.find({})    
     // .then((users)=>{res.send(users)})
     // .catch((err)=>{res.status(500).send()});
 });
 
-//Unquie User Route
-router.get('/users/:id', async (req,res)=>{
-    
-    const _id=req.params.id;
-   try{
-    const user=await User.findById({_id});
-    
-    if(!user){
-       return res.status(404).send("miss");
+
+router.post('/users/logout',auth, async (req,res)=>{
+    try {
+        req.user.tokens=req.user.tokens.filter((token)=>
+        { 
+            return token.token!==req.token;
+        });
+        await req.user.save();
+        res.send("logout");
+    } catch (error) {
+        res.status(500).send(); 
+    } 
+})
+
+router.post('/users/logoutAll',auth,async (req,res)=>{
+    try {
+        req.user.tokens=[];
+        await req.user.save();
+        res.send("logout from all");
+    } catch (error) {
+        res.status(500).send();
     }
-    console.log(user);
-    res.send(user);
-   }
-   catch(e){
+})
+
+router.get('/users/login',async (req,res)=>{
+    try {
+        const user=await User.findByCredentials(req.body.email,req.body.password);
+        const token= await user.generateAuthToken();
+
+        res.send({user,token});
+
+    } catch (error) {
+        res.status(500).send();
+        
+    }
+});
+
+//Unquie User Route
+// router.get('/users/:id', async (req,res)=>{
+    
+//     const _id=req.params.id;
+//    try{
+//     const user=await User.findById({_id});
+    
+//     if(!user){
+//        return res.status(404).send("miss");
+//     }
+//     console.log(user);
+//     res.send(user);
+//    }
+//    catch(e){
    
-       res.status(500).send(e);
-   }
+//        res.status(500).send(e);
+//    }
    
    
    
@@ -48,15 +79,19 @@ router.get('/users/:id', async (req,res)=>{
     //     }
     //         res.send(user)})
     // .catch((err)=>{res.status(500).send()});
-});
+// });
 
 //POST User Route
 router.post('/users',async (req,res)=>{
     const user = new User(req.body);
+    
 
     try{
-       await user.save();
-       res.send(user);
+        const token=await user.generateAuthToken();
+
+      
+
+       res.send({user,token});
     }
     catch(e){
         res.status(400).send(e);
@@ -66,9 +101,9 @@ router.post('/users',async (req,res)=>{
 });
 
 //User Update Route
-router.patch('/users/:id',async(req,res)=>{
+router.patch('/users/me',auth,async(req,res)=>{
     const updates=Object.keys(req.body);
-    const allowedUpdate=['name','passowrd','email'];
+    const allowedUpdate=['name','password','email','age'];
     const validOperation=updates.every((update)=>allowedUpdate.includes(update));
 
     if(!validOperation){
@@ -77,23 +112,20 @@ router.patch('/users/:id',async(req,res)=>{
     }
 
     try {
-        const updated= await User.findByIdAndUpdate(req.params.id,req.body,{new:true,runValidators:true});
-        if(!updated){
-            return res.status(404).send();
-        }
-        res.send(updated);
+        //const updatedUser= await User.findById(req.params.id);
+        updates.forEach((update)=>req.user[update]=req.body[update]);
+        await req.user.save();
+        //const updated= await User.findByIdAndUpdate(req.params.id,req.body,{new:true,runValidators:true});
+        res.send(req.user);
     } catch (error) {
         res.status(400).send(error);
     }
 })
 
-router.delete('/users/:id',async (req,res)=>{
+router.delete('/users/me',auth,async (req,res)=>{
     try {
-        const deleted=await User.findByIdAndDelete(req.params.id);
-        if(!deleted){
-            return res.status(404).send({msg:"No User Found with the given ID!"});
-        }
-        res.send(deleted);
+        await req.user.remove();
+        res.send(req.user);
     } catch (error) {
         res.status(500).send();
     }
